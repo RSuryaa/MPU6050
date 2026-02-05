@@ -18,9 +18,6 @@ void MPU_Init(mss_i2c_instance_t *i2c_instance) {
     // Write 0x80 to PWR_MGMT_1
     MPU_Write_Register(i2c_instance, MPU_REG_PWR_MGMT_1, MPU_BIT_RESET);
     
-    // Brief delay might be needed here depending on your FPGA clock speed
-    // for the device to reset, but we will proceed to configuration.
-    
     // 2. Wake up the MPU-6050 and set Clock Source
     // By default, MPU-6050 wakes up in Sleep Mode (Bit 6 = 1)
     MPU_Write_Register(i2c_instance, MPU_REG_PWR_MGMT_1, MPU_CLKSEL_PLL_X);
@@ -233,4 +230,51 @@ void MPU_Enable_Motion_Interrupt(mss_i2c_instance_t *i2c_instance, uint8_t thres
     int_enable = 0x40;
     MPU_Write_Register(i2c_instance, MPU_REG_INT_ENABLE, int_enable);
 
+}
+
+void MPU_Set_Self_Test(mss_i2c_instance_t *i2c_instance, uint8_t enable) {
+    uint8_t gyro_config;
+    uint8_t accel_config;
+
+    if (enable) {
+        // --- ENABLE SELF TEST ---
+        // We must set specific ranges for the test to work:
+        // Gyro:  +/- 250 dps (FS_SEL = 0)
+        // Accel: +/- 8g      (AFS_SEL = 2, i.e., bit pattern 10)
+        
+        // Register 0x1B (GYRO_CONFIG)
+        // Bits 7,6,5 (XG_ST, YG_ST, ZG_ST) = 1 (Enable Self Test)
+        // Bits 4,3   (FS_SEL)              = 00 (+/- 250 dps)
+        // Binary: 1110 0000 = 0xE0
+        gyro_config = 0xE0;
+
+        // Register 0x1C (ACCEL_CONFIG)
+        // Bits 7,6,5 (XA_ST, YA_ST, ZA_ST) = 1 (Enable Self Test)
+        // Bits 4,3   (AFS_SEL)             = 10 (+/- 8g)
+        // Binary: 1111 0000 = 0xF0
+        accel_config = 0xF0;
+    } else {
+        // --- DISABLE SELF TEST (Return to Defaults) ---
+        // You might want to pass your desired default ranges here instead of hardcoding 0.
+        
+        // Disable Gyro ST, Set range back to default +/- 250dps
+        gyro_config = 0x00;
+        
+        // Disable Accel ST, Set range back to default +/- 2g
+        accel_config = 0x00;
+    }
+
+    MPU_Write_Register(i2c_instance, MPU_REG_GYRO_CONFIG, gyro_config);
+    MPU_Write_Register(i2c_instance, MPU_REG_ACCEL_CONFIG, accel_config);
+}
+
+void MPU_Deinit(mss_i2c_instance_t *i2c_instance) {
+    // 1. Disable Interrupts immediately
+    // Writing 0 to INT_ENABLE stops the MPU from signaling the FPGA.
+    MPU_Write_Register(i2c_instance, MPU_REG_INT_ENABLE, 0x00);
+
+    // 2. Reset the Device
+    // Register 0x6B (PWR_MGMT_1) Bit 7 is DEVICE_RESET.
+    // Writing 0x80 triggers a full reset of internal registers to default.
+    MPU_Write_Register(i2c_instance, MPU_REG_PWR_MGMT_1, MPU_BIT_RESET);
 }
