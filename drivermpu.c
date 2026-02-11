@@ -13,22 +13,34 @@ static void MPU_Write_Register(mss_i2c_instance_t *i2c_instance, uint8_t reg_add
     MSS_I2C_wait_complete(i2c_instance, MSS_I2C_NO_TIMEOUT);
 }
 
-void MPU_Init(mss_i2c_instance_t *i2c_instance) {
-    // 1. Reset the device 
-    // Write 0x80 to PWR_MGMT_1
+/* ... inside mpu.c ... */
+
+void MPU_Init(mss_i2c_instance_t *i2c_instance, uint8_t accel_range, uint8_t gyro_range) {
+    // 1. Reset the device (Optional but recommended)
+    // Write 0x80 to PWR_MGMT_1 to reset internal registers to default
     MPU_Write_Register(i2c_instance, MPU_REG_PWR_MGMT_1, MPU_BIT_RESET);
     
-    // 2. Wake up the MPU-6050 and set Clock Source
-    // By default, MPU-6050 wakes up in Sleep Mode (Bit 6 = 1)
+    // Small delay loop (approx 10-100ms) might be needed here for reset to complete 
+    // depending on your FPGA clock speed. A simple for-loop is usually sufficient 
+    // for bare metal if you don't have a timer service.
+    // for(volatile int i=0; i<10000; i++); 
+
+    // 2. Wake up and set Clock Source
+    // Clear Sleep (Bit 6) and set Clock Source to PLL with X Gyro (0x01)
+    // Register 0x6B (PWR_MGMT_1)
     MPU_Write_Register(i2c_instance, MPU_REG_PWR_MGMT_1, MPU_CLKSEL_PLL_X);
 
     // 3. Configure Gyroscope Range
-    // MPU_REG_GYRO_CONFIG: Default is +/- 250dps (0x00)
-    MPU_Write_Register(i2c_instance, MPU_REG_GYRO_CONFIG, 0x00);
+    // Register 0x1B (GYRO_CONFIG). Bits 4:3 control FS_SEL.
+    // We shift the user parameter (0-3) left by 3 bits to place it correctly.
+    // Example: MPU_RANGE_500DPS (1) << 3 becomes 0000 1000 (0x08)
+    MPU_Write_Register(i2c_instance, MPU_REG_GYRO_CONFIG, gyro_range << 3);
 
     // 4. Configure Accelerometer Range
-    // MPU_REG_ACCEL_CONFIG: Default is +/- 2g (0x00)
-    MPU_Write_Register(i2c_instance, MPU_REG_ACCEL_CONFIG, 0x00);
+    // Register 0x1C (ACCEL_CONFIG). Bits 4:3 control AFS_SEL.
+    // We shift the user parameter (0-3) left by 3 bits.
+    // Example: MPU_RANGE_8G (2) << 3 becomes 0001 0000 (0x10)
+    MPU_Write_Register(i2c_instance, MPU_REG_ACCEL_CONFIG, accel_range << 3);
 }
 
 void MPU_Read_All(mss_i2c_instance_t *i2c_instance, MPU_Data_t *data) {
